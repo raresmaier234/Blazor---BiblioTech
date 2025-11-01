@@ -1,0 +1,431 @@
+@page "/books"
+@inject IBookService BookService
+@inject IAuthorService AuthorService
+@inject ICategoryService CategoryService
+@inject NavigationManager Navigation
+@using Microsoft.AspNetCore.WebUtilities
+@implements IDisposable
+
+<div class="content-grid">
+    <!-- Main Content -->
+    <div class="main-column">
+        <!-- Page Header -->
+        <div class="page-header">
+            <div class="header-content">
+                <h1 class="page-title">📖 Gestionare Cărți</h1>
+                <p class="page-subtitle">Administrează colecția ta de cărți cu ușurință</p>
+            </div>
+            <button class="btn btn-primary btn-animated" @onclick="ToggleAddForm">
+                @if (showAddForm)
+                {
+                    <span>✖️ Anulează</span>
+                }
+                else
+                {
+                    <span>➕ Adaugă Carte</span>
+                }
+            </button>
+        </div>
+
+        <!-- Search and Filters -->
+        <div class="search-section">
+            <div class="search-box-container">
+                <input type="text" class="search-input" placeholder="🔍 Caută după titlu sau autor..." 
+                       @bind="searchTerm" @onkeypress="HandleKeyPress" />
+            </div>
+            <div class="filter-section">
+                <select class="filter-select" @bind="filterAuthorId">
+                    <option value="">Toți autorii</option>
+                    @if (authors != null)
+                    {
+                        @foreach (var author in authors)
+                        {
+                            <option value="@author.Id">@author.Name</option>
+                        }
+                    }
+                </select>
+                <select class="filter-select" @bind="filterCategoryId">
+                    <option value="">Toate categoriile</option>
+                    @if (categories != null)
+                    {
+                        @foreach (var category in categories)
+                        {
+                            <option value="@category.Id">@category.Name</option>
+                        }
+                    }
+                </select>
+                <button class="btn btn-primary" @onclick="ApplyFilters">
+                    <span>🔍 Caută</span>
+                </button>
+                <button class="btn btn-outline-secondary" @onclick="ClearFilters">
+                    <span>🔄 Resetează</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Books List -->
+        @if (filteredBooks?.Any() == true)
+        {
+            <div class="row">
+                @foreach (var book in filteredBooks)
+                {
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">@book.Title</h5>
+                                <p class="card-text">
+                                    <strong>Autor:</strong> @(book.Author?.Name ?? "Necunoscut")<br />
+                                    <strong>An:</strong> @book.Year
+                                </p>
+                                @if (book.BookCategories?.Any() == true)
+                                {
+                                    <div class="mb-3">
+                                        @foreach (var bookCategory in book.BookCategories)
+                                        {
+                                            <span class="badge bg-secondary me-1">@(bookCategory.Category?.Name ?? "N/A")</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <div class="card-footer bg-transparent">
+                                <a href="/books/@book.Id" class="btn btn-primary btn-sm me-2">
+                                    👁️ Detalii
+                                </a>
+                                <button class="btn btn-warning btn-sm me-2" @onclick="() => ShowEditForm(book)">
+                                    ✏️ Editează
+                                </button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteBook(book.Id)">
+                                    🗑️ Șterge
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="empty-state">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">📚</div>
+                <h3>Nu s-au găsit cărți</h3>
+                <p>@(string.IsNullOrEmpty(searchTerm) ? "Încă nu ai adăugat nicio carte." : "Nu există cărți care să corespundă criteriilor de căutare.")</p>
+            </div>
+        }
+    </div>
+
+    <!-- Sidebar Form -->
+    <div class="sidebar-form @(showAddForm || showEditForm ? "show" : "")">
+        <div class="form-card">
+            <h3>@(showEditForm ? "Editează Cartea" : "Adaugă Carte Nouă")</h3>
+            
+            <EditForm Model="@currentBook" OnValidSubmit="SaveBook">
+                <DataAnnotationsValidator />
+                
+                <div class="mb-3">
+                    <label class="form-label">Titlu *</label>
+                    <InputText class="form-control" @bind-Value="currentBook.Title" />
+                    <ValidationMessage For="@(() => currentBook.Title)" class="validation-message" />
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Anul publicării *</label>
+                    <InputNumber class="form-control" @bind-Value="currentBook.Year" />
+                    <ValidationMessage For="@(() => currentBook.Year)" class="validation-message" />
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Autor *</label>
+                    <InputSelect class="form-control" @bind-Value="currentBook.AuthorId">
+                        <option value="0">Selectează un autor</option>
+                        @if (authors != null)
+                        {
+                            @foreach (var author in authors)
+                            {
+                                <option value="@author.Id">@author.Name</option>
+                            }
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => currentBook.AuthorId)" class="validation-message" />
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Categorii *</label>
+                    <div class="categories-grid @(showCategoryError ? "error" : "")">
+                        @if (categories != null)
+                        {
+                            @foreach (var category in categories)
+                            {
+                                <div class="category-checkbox">
+                                    <input type="checkbox" 
+                                           id="cat-@category.Id" 
+                                           @onchange="@((e) => ToggleCategory(category.Id, (bool)e.Value!))"
+                                           checked="@selectedCategoryIds.Contains(category.Id)" />
+                                    <label for="cat-@category.Id">@category.Name</label>
+                                </div>
+                            }
+                        }
+                    </div>
+                    @if (showCategoryError)
+                    {
+                        <span class="validation-message">Selectează cel puțin o categorie.</span>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger">
+                        @errorMessage
+                    </div>
+                }
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        @(showEditForm ? "Actualizează" : "Adaugă") Cartea
+                    </button>
+                    <button type="button" class="btn btn-secondary" @onclick="CancelForm">
+                        Anulează
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Book>? books;
+    private List<Book>? filteredBooks;
+    private List<Author>? authors;
+    private List<Category>? categories;
+    private bool showAddForm = false;
+    private bool showEditForm = false;
+    private string searchTerm = "";
+    private string filterAuthorId = "";
+    private string filterCategoryId = "";
+    private Book currentBook = new Book { Title = "" };
+    private HashSet<int> selectedCategoryIds = new();
+    private string errorMessage = "";
+    private bool showCategoryError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        await LoadData();
+        LoadFiltersFromQueryString();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        LoadFiltersFromQueryString();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private void LoadFiltersFromQueryString()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        
+        searchTerm = query.TryGetValue("search", out var searchValue) ? searchValue.ToString() : "";
+        filterAuthorId = query.TryGetValue("authorId", out var authorValue) ? authorValue.ToString() : "";
+        filterCategoryId = query.TryGetValue("categoryId", out var categoryValue) ? categoryValue.ToString() : "";
+        
+        FilterBooks();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            books = await BookService.GetAllBooksAsync();
+            authors = await AuthorService.GetAllAuthorsAsync();
+            categories = await CategoryService.GetAllCategoriesAsync();
+            FilterBooks();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading data: {ex.Message}");
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var queryParams = new Dictionary<string, string?>();
+        
+        if (!string.IsNullOrEmpty(searchTerm))
+        {
+            queryParams["search"] = searchTerm;
+        }
+        if (!string.IsNullOrEmpty(filterAuthorId))
+        {
+            queryParams["authorId"] = filterAuthorId;
+        }
+        if (!string.IsNullOrEmpty(filterCategoryId))
+        {
+            queryParams["categoryId"] = filterCategoryId;
+        }
+
+        var uri = QueryHelpers.AddQueryString("/books", queryParams);
+        Navigation.NavigateTo(uri);
+    }
+
+    private void HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ApplyFilters();
+        }
+    }
+
+    private void FilterBooks()
+    {
+        if (books == null)
+        {
+            filteredBooks = new List<Book>();
+            return;
+        }
+
+        filteredBooks = books.Where(book =>
+            (string.IsNullOrEmpty(searchTerm) || 
+             book.Title.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+             (book.Author?.Name != null && book.Author.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))) &&
+            (string.IsNullOrEmpty(filterAuthorId) || 
+             book.AuthorId.ToString() == filterAuthorId) &&
+            (string.IsNullOrEmpty(filterCategoryId) ||
+             book.BookCategories.Any(bc => bc.CategoryId.ToString() == filterCategoryId))
+        ).ToList();
+
+        StateHasChanged();
+    }
+
+    private void ClearFilters()
+    {
+        searchTerm = "";
+        filterAuthorId = "";
+        filterCategoryId = "";
+        Navigation.NavigateTo("/books");
+    }
+
+    private void ToggleAddForm()
+    {
+        showAddForm = !showAddForm;
+        showEditForm = false;
+        if (showAddForm)
+        {
+            currentBook = new Book { Title = "" };
+            selectedCategoryIds.Clear();
+        }
+    }
+
+    private void ShowEditForm(Book book)
+    {
+        showEditForm = true;
+        showAddForm = false;
+        currentBook = new Book 
+        { 
+            Id = book.Id,
+            Title = book.Title,
+            Year = book.Year,
+            AuthorId = book.AuthorId,
+            Author = book.Author
+        };
+        selectedCategoryIds = book.BookCategories?.Select(bc => bc.CategoryId).ToHashSet() ?? new HashSet<int>();
+    }
+
+    private void ToggleCategory(int categoryId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            selectedCategoryIds.Add(categoryId);
+        }
+        else
+        {
+            selectedCategoryIds.Remove(categoryId);
+        }
+        
+        // Ascunde eroarea când selectezi o categorie
+        if (selectedCategoryIds.Any())
+        {
+            showCategoryError = false;
+        }
+    }
+
+    private void CancelForm()
+    {
+        showAddForm = false;
+        showEditForm = false;
+        selectedCategoryIds.Clear();
+        errorMessage = "";
+        showCategoryError = false;
+    }
+
+    private async Task SaveBook()
+    {
+        try
+        {
+            errorMessage = "";
+            showCategoryError = false;
+
+            // Validare suplimentară pentru AuthorId (nu e acoperită de data annotations)
+            if (currentBook.AuthorId == 0)
+            {
+                errorMessage = "Te rugăm să selectezi un autor.";
+                return;
+            }
+
+            // Validare pentru categorii - cel puțin una trebuie selectată (doar la adăugare nouă)
+            if (!showEditForm && !selectedCategoryIds.Any())
+            {
+                showCategoryError = true;
+                errorMessage = "Te rugăm să selectezi cel puțin o categorie pentru carte.";
+                return;
+            }
+
+            if (showEditForm)
+            {
+                await BookService.UpdateBookWithCategoriesAsync(currentBook.Id, currentBook, selectedCategoryIds.ToList());
+            }
+            else
+            {
+                await BookService.CreateBookWithCategoriesAsync(currentBook, selectedCategoryIds.ToList());
+            }
+
+            await LoadData();
+            CancelForm();
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "A apărut o eroare la salvarea cărții. Te rugăm să încerci din nou.";
+            Console.WriteLine($"Error saving book: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteBook(int bookId)
+    {
+        try
+        {
+            if (confirm("Ești sigur că vrei să ștergi această carte?"))
+            {
+                await BookService.DeleteBookAsync(bookId);
+                await LoadData();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting book: {ex.Message}");
+        }
+    }
+
+    private bool confirm(string message)
+    {
+        // În o aplicație reală, ai folosi JSInterop pentru confirm
+        return true; // Pentru simplitate, returnăm true
+    }
+}

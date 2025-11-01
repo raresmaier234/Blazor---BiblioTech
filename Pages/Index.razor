@@ -1,0 +1,182 @@
+@page "/"
+@inject IBookService BookService
+@inject IAuthorService AuthorService
+@inject ICategoryService CategoryService
+@inject NavigationManager Navigation
+
+<div class="homepage-container">
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="hero-content">
+            <h1 class="hero-title">📚 Bine ai venit la BiblioTech!</h1>
+            <p class="hero-subtitle">Gestionează cu ușurință colecția ta de cărți, autori și categorii într-un singur
+                loc modern și intuitiv.</p>
+            <div class="hero-actions">
+                <a href="/books" class="btn btn-primary btn-lg btn-animated">
+                    <span>📖 Explorează Cărțile</span>
+                </a>
+                <a href="/authors" class="btn btn-success btn-lg btn-animated">
+                    <span>✍️ Vezi Autorii</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="stats-section">
+        <div class="stats-grid">
+            <div class="stats-card pulse-animation">
+                <div class="stats-icon">📖</div>
+                <div class="stats-number">@totalBooks</div>
+                <div class="stats-label">Cărți în bibliotecă</div>
+            </div>
+            <div class="stats-card pulse-animation" style="animation-delay: 0.2s;">
+                <div class="stats-icon">✍️</div>
+                <div class="stats-number">@totalAuthors</div>
+                <div class="stats-label">Autori înregistrați</div>
+            </div>
+            <div class="stats-card pulse-animation" style="animation-delay: 0.4s;">
+                <div class="stats-icon">🏷️</div>
+                <div class="stats-number">@totalCategories</div>
+                <div class="stats-label">Categorii disponibile</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Books Section -->
+    <div class="content-section">
+        @if (recentBooks?.Any() == true)
+        {
+            <div class="section-card">
+                <div class="section-header">
+                    <h2 class="section-title">📚 Cărți Recent Adăugate</h2>
+                    <p class="section-subtitle">Ultimele 3 cărți adăugate în bibliotecă</p>
+                </div>
+                <div class="books-grid">
+                    @foreach (var book in recentBooks)
+                    {
+                        <div class="book-card" @onclick="() => GoToBookDetails(book.Id)" style="cursor: pointer;">
+                            <div class="book-card-body">
+                                <h5 class="book-title">@book.Title</h5>
+                                <div class="book-info">
+                                    <p><strong>Autor:</strong> @(book.Author?.Name ?? "Necunoscut")</p>
+                                    <p><strong>An:</strong> @book.Year</p>
+                                    <p class="book-timestamp">
+                                        <strong>Adăugată:</strong> @book.CreatedAt.ToString("dd MMM yyyy, HH:mm")
+                                    </p>
+                                </div>
+                                @if (book.BookCategories?.Any() == true)
+                                {
+                                    <div class="book-categories">
+                                        @foreach (var bookCategory in book.BookCategories.Take(3))
+                                        {
+                                            <span class="category-badge">@(bookCategory.Category?.Name ?? "N/A")</span>
+                                        }
+                                        @if (book.BookCategories.Count > 3)
+                                        {
+                                            <span class="category-badge more">+@(book.BookCategories.Count - 3)</span>
+                                        }
+                                    </div>
+                                }
+                                <div class="book-card-footer mt-3">
+                                    <span class="view-details-link">👁️ Vezi detalii →</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="section-action">
+                    <a href="/books" class="btn btn-primary btn-lg">Vezi toate cărțile</a>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="section-card">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📚</div>
+                    <h3 class="empty-state-title">Biblioteca ta este goală</h3>
+                    <p class="empty-state-text">Începe prin a adăuga prima ta carte și construiește-ți colecția digitală!
+                    </p>
+                    <a href="/books" class="btn btn-primary btn-lg btn-animated">Adaugă Prima Carte</a>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Quick Actions Section -->
+    <div class="content-section">
+        <div class="section-card">
+            <div class="section-header">
+                <h2 class="section-title">⚡ Acțiuni Rapide</h2>
+                <p class="section-subtitle">Acces rapid la funcționalitățile principale</p>
+            </div>
+            <div class="quick-actions-grid">
+                <a href="/books" class="quick-action-card books">
+                    <div class="quick-action-icon">📖</div>
+                    <div class="quick-action-title">Gestionează Cărți</div>
+                    <div class="quick-action-desc">Adaugă, editează sau șterge cărți</div>
+                </a>
+                <a href="/authors" class="quick-action-card authors">
+                    <div class="quick-action-icon">✍️</div>
+                    <div class="quick-action-title">Gestionează Autori</div>
+                    <div class="quick-action-desc">Administrează autorii favoriți</div>
+                </a>
+                <a href="/categories" class="quick-action-card categories">
+                    <div class="quick-action-icon">🏷️</div>
+                    <div class="quick-action-title">Gestionează Categorii</div>
+                    <div class="quick-action-desc">Organizează în categorii tematice</div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Book>? recentBooks;
+    private int totalBooks = 0;
+    private int totalAuthors = 0;
+    private int totalCategories = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            recentBooks = await BookService.GetRecentBooksAsync(3);
+
+            var allBooks = await BookService.GetAllBooksAsync();
+            totalBooks = allBooks.Count;
+
+            var allAuthors = await AuthorService.GetAllAuthorsAsync();
+            totalAuthors = allAuthors.Count;
+
+            var allCategories = await CategoryService.GetAllCategoriesAsync();
+            totalCategories = allCategories.Count;
+        }
+        catch (Exception ex)
+        {
+            // Log error - în producție ar trebui să folosim ILogger
+            Console.WriteLine($"Error loading data: {ex.Message}");
+        }
+        finally
+        {
+            // Loading completed
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+        StateHasChanged();
+    }
+
+    private void GoToBookDetails(int bookId)
+    {
+        Navigation.NavigateTo($"/books/{bookId}");
+    }
+}

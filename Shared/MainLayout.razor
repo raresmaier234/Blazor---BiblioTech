@@ -1,0 +1,57 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="app-container">
+    <!-- Fixed Sidebar -->
+    <div class="sidebar-fixed">
+        <NavMenu />
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <header class="app-header">
+            <div class="container-fluid">
+                <h1 class="app-title">@GetPageTitle()</h1>
+            </div>
+        </header>
+
+        <main class="content-area">
+            <div class="container-fluid">
+                @Body
+            </div>
+        </main>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private string GetPageTitle()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var path = uri.AbsolutePath.ToLower();
+
+        return path switch
+        {
+            "/" => "🏠 Acasă",
+            "/books" => "📖 Gestionare Cărți",
+            "/authors" => "✍️ Gestionare Autori",
+            "/categories" => "🏷️ Gestionare Categorii",
+            _ => "📚 BiblioTech"
+        };
+    }
+}
