@@ -1,9 +1,9 @@
 @page "/books/{id:int}"
-@inject IBookService BookService
+@inject BookDetailsPageManager PageManager
 @inject NavigationManager Navigation
 
 <div class="book-details-container">
-    @if (book == null)
+    @if (PageManager.CurrentBook == null)
     {
         <div class="loading-state">
             <div class="spinner-border text-primary" role="status">
@@ -17,7 +17,7 @@
         <div class="book-details-card">
             <!-- Back Button -->
             <div class="mb-4">
-                <button class="btn btn-outline-secondary" @onclick="GoBack">
+                <button class="btn btn-outline-secondary" @onclick="PageManager.NavigateToBooks">
                     ← Înapoi la Cărți
                 </button>
             </div>
@@ -27,13 +27,13 @@
                 <div class="book-header-content">
                     <div class="book-icon">📖</div>
                     <div class="book-header-info">
-                        <h1 class="book-details-title">@book.Title</h1>
+                        <h1 class="book-details-title">@PageManager.CurrentBook.Title</h1>
                         <div class="book-meta">
                             <span class="meta-item">
-                                <strong>📅 Anul publicării:</strong> @book.Year
+                                <strong>📅 Anul publicării:</strong> @PageManager.CurrentBook.Year
                             </span>
                             <span class="meta-item">
-                                <strong>📆 Adăugată la:</strong> @book.CreatedAt.ToString("dd MMMM yyyy, HH:mm")
+                                <strong>📆 Adăugată la:</strong> @PageManager.CurrentBook.CreatedAt.ToString("dd MMMM yyyy, HH:mm")
                             </span>
                         </div>
                     </div>
@@ -47,21 +47,21 @@
                     <div class="section-icon">✍️</div>
                     <div class="section-content">
                         <h3 class="section-title">Autor</h3>
-                        @if (book.Author != null)
+                        @if (PageManager.CurrentBook.Author != null)
                         {
                             <div class="author-card">
-                                <h4 class="author-name">@book.Author.Name</h4>
-                                @if (!string.IsNullOrEmpty(book.Author.Email))
+                                <h4 class="author-name">@PageManager.CurrentBook.Author.Name</h4>
+                                @if (!string.IsNullOrEmpty(PageManager.CurrentBook.Author.Email))
                                 {
                                     <p class="author-email">
-                                        <span class="email-icon">✉️</span> @book.Author.Email
+                                        <span class="email-icon">✉️</span> @PageManager.CurrentBook.Author.Email
                                     </p>
                                 }
-                                @if (!string.IsNullOrEmpty(book.Author.Biography))
+                                @if (!string.IsNullOrEmpty(PageManager.CurrentBook.Author.Biography))
                                 {
                                     <div class="author-bio">
                                         <strong>Biografie:</strong>
-                                        <p>@book.Author.Biography</p>
+                                        <p>@PageManager.CurrentBook.Author.Biography</p>
                                     </div>
                                 }
                             </div>
@@ -78,10 +78,10 @@
                     <div class="section-icon">🏷️</div>
                     <div class="section-content">
                         <h3 class="section-title">Categorii</h3>
-                        @if (book.BookCategories?.Any() == true)
+                        @if (PageManager.CurrentBook.BookCategories?.Any() == true)
                         {
                             <div class="categories-list">
-                                @foreach (var bookCategory in book.BookCategories)
+                                @foreach (var bookCategory in PageManager.CurrentBook.BookCategories)
                                 {
                                     <div class="category-item">
                                         <div class="category-header">
@@ -107,24 +107,24 @@
             <div class="book-statistics">
                 <div class="stat-item">
                     <div class="stat-icon">🏷️</div>
-                    <div class="stat-value">@(book.BookCategories?.Count ?? 0)</div>
+                    <div class="stat-value">@(PageManager.CurrentBook.BookCategories?.Count ?? 0)</div>
                     <div class="stat-label">Categorii</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-icon">📅</div>
-                    <div class="stat-value">@book.Year</div>
+                    <div class="stat-value">@PageManager.CurrentBook.Year</div>
                     <div class="stat-label">An publicare</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-icon">⏱️</div>
-                    <div class="stat-value">@GetDaysAgo()</div>
+                    <div class="stat-value">@PageManager.GetDaysAgo()</div>
                     <div class="stat-label">Adăugată acum</div>
                 </div>
             </div>
 
             <!-- Action Buttons -->
             <div class="book-actions">
-                <button class="btn btn-primary btn-lg" @onclick="EditBook">
+                <button class="btn btn-primary btn-lg" @onclick="() => PageManager.NavigateToEdit(Id)">
                     ✏️ Editează Cartea
                 </button>
                 <button class="btn btn-outline-danger btn-lg" @onclick="DeleteBook">
@@ -139,85 +139,21 @@
     [Parameter]
     public int Id { get; set; }
 
-    private Book? book;
-
     protected override async Task OnInitializedAsync()
     {
-        await LoadBook();
-    }
-
-    private async Task LoadBook()
-    {
-        try
-        {
-            book = await BookService.GetBookByIdAsync(Id);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error loading book: {ex.Message}");
-        }
-    }
-
-    private void GoBack()
-    {
-        Navigation.NavigateTo("/books");
-    }
-
-    private void EditBook()
-    {
-        Navigation.NavigateTo($"/books?edit={Id}");
+        await PageManager.LoadBookAsync(Id);
     }
 
     private async Task DeleteBook()
     {
-        if (confirm($"Ești sigur că vrei să ștergi cartea '{book?.Title}'?"))
+        if (confirm($"Ești sigur că vrei să ștergi cartea '{PageManager.CurrentBook?.Title}'?"))
         {
-            try
-            {
-                await BookService.DeleteBookAsync(Id);
-                Navigation.NavigateTo("/books");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error deleting book: {ex.Message}");
-            }
+            await PageManager.DeleteBookAsync(Id);
         }
     }
 
     private bool confirm(string message)
     {
-        // În producție, ar trebui folosit JSInterop
         return true;
-    }
-
-    private string GetDaysAgo()
-    {
-        if (book == null) return "N/A";
-
-        // Compară cu ora curentă din București
-        var romanianTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Bucharest");
-        var currentRomanianTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, romanianTimeZone);
-        var timeSpan = currentRomanianTime - book.CreatedAt;
-
-        if (timeSpan.TotalDays < 1)
-        {
-            if (timeSpan.TotalHours < 1)
-            {
-                return $"{(int)timeSpan.TotalMinutes} min";
-            }
-            return $"{(int)timeSpan.TotalHours}h";
-        }
-        else if (timeSpan.TotalDays < 30)
-        {
-            return $"{(int)timeSpan.TotalDays} zile";
-        }
-        else if (timeSpan.TotalDays < 365)
-        {
-            return $"{(int)(timeSpan.TotalDays / 30)} luni";
-        }
-        else
-        {
-            return $"{(int)(timeSpan.TotalDays / 365)} ani";
-        }
     }
 }

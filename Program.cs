@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using BlazorLibraryApp.Data;
 using BlazorLibraryApp.Services;
+using BlazorLibraryApp.Managers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,12 @@ builder.Services.AddDbContext<LibraryContext>();
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IAuthorService, AuthorService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
+
+// Add Page Managers
+builder.Services.AddScoped<BookPageManager>();
+builder.Services.AddScoped<AuthorPageManager>();
+builder.Services.AddScoped<CategoryPageManager>();
+builder.Services.AddScoped<BookDetailsPageManager>();
 
 var app = builder.Build();
 
