@@ -1,0 +1,239 @@
+@page "/dashboard"
+@inject DashboardManager Manager
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <div class="header-content">
+            <h1 class="dashboard-title">📊 Dashboard</h1>
+            <p class="dashboard-subtitle">Analiză și statistici despre colecția ta de cărți</p>
+        </div>
+        <button class="btn btn-outline-secondary" @onclick="RefreshData">
+            🔄 Actualizează
+        </button>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="stats-grid">
+        <div class="stat-card stat-books">
+            <div class="stat-icon">📚</div>
+            <div class="stat-value">@Manager.TotalBooks</div>
+            <div class="stat-label">Total Cărți</div>
+        </div>
+        <div class="stat-card stat-authors">
+            <div class="stat-icon">✍️</div>
+            <div class="stat-value">@Manager.TotalAuthors</div>
+            <div class="stat-label">Autori</div>
+        </div>
+        <div class="stat-card stat-categories">
+            <div class="stat-icon">🏷️</div>
+            <div class="stat-value">@Manager.TotalCategories</div>
+            <div class="stat-label">Categorii</div>
+        </div>
+        <div class="stat-card stat-month">
+            <div class="stat-icon">📅</div>
+            <div class="stat-value">@Manager.BooksThisMonth</div>
+            <div class="stat-label">Adăugate Luna Aceasta</div>
+        </div>
+    </div>
+
+    <!-- Charts Grid -->
+    <div class="charts-grid">
+        <!-- Books by Year Chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>📈 Cărți pe Anul Publicării</h3>
+            </div>
+            <div class="chart-body">
+                @if (booksByYear.Any())
+                {
+                    <div class="bar-chart">
+                        @foreach (var item in booksByYear)
+                        {
+                            var maxCount = booksByYear.Max(x => x.Count);
+                            var heightPercentage = maxCount > 0 ? (double)item.Count / maxCount * 100 : 0;
+                            
+                            <div class="bar-item">
+                                <div class="bar-label-top">@item.Count</div>
+                                <div class="bar" style="height: @(heightPercentage)%">
+                                    <div class="bar-fill"></div>
+                                </div>
+                                <div class="bar-label">@item.Year</div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-chart">📊 Nu există date disponibile</div>
+                }
+            </div>
+        </div>
+
+        <!-- Top Categories Chart -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>🏷️ Top 5 Categorii Populare</h3>
+            </div>
+            <div class="chart-body">
+                @if (topCategories.Any())
+                {
+                    <div class="horizontal-bar-chart">
+                        @foreach (var cat in topCategories)
+                        {
+                            <div class="h-bar-item">
+                                <div class="h-bar-label">@cat.Name</div>
+                                <div class="h-bar-container">
+                                    <div class="h-bar" style="width: @(cat.Percentage)%">
+                                        <span class="h-bar-value">@cat.Count cărți (@cat.Percentage%)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-chart">🏷️ Nu există categorii</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row Charts -->
+    <div class="charts-grid">
+        <!-- Top Authors -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>👤 Top 5 Autori Prolifici</h3>
+            </div>
+            <div class="chart-body">
+                @if (topAuthors.Any())
+                {
+                    <div class="leaderboard">
+                        @foreach (var (author, index) in topAuthors.Select((a, i) => (a, i)))
+                        {
+                            var medal = index switch
+                            {
+                                0 => "🥇",
+                                1 => "🥈",
+                                2 => "🥉",
+                                _ => $"{index + 1}."
+                            };
+                            
+                            <div class="leaderboard-item">
+                                <div class="rank">@medal</div>
+                                <div class="leaderboard-info">
+                                    <div class="leaderboard-name">@author.Name</div>
+                                    <div class="leaderboard-books">@author.BookCount @(author.BookCount == 1 ? "carte" : "cărți")</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-chart">👤 Nu există autori</div>
+                }
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>📌 Informații Suplimentare</h3>
+            </div>
+            <div class="chart-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-icon">📊</div>
+                        <div class="info-content">
+                            <div class="info-value">@Manager.AverageBooksPerAuthor.ToString("F1")</div>
+                            <div class="info-label">Cărți/Autor (medie)</div>
+                        </div>
+                    </div>
+                    
+                    @if (Manager.MostRecentBook != null)
+                    {
+                        <div class="info-item">
+                            <div class="info-icon">⭐</div>
+                            <div class="info-content">
+                                <div class="info-value">@Manager.MostRecentBook.Title</div>
+                                <div class="info-label">Cea mai recentă carte</div>
+                                <div class="info-meta">
+                                    @Manager.MostRecentBook.Author?.Name • @Manager.MostRecentBook.CreatedAt.ToString("dd MMM yyyy")
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    
+                    <div class="info-item">
+                        <div class="info-icon">🎯</div>
+                        <div class="info-content">
+                            <div class="info-value">@GetOldestYear() - @GetNewestYear()</div>
+                            <div class="info-label">Interval ani</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="dashboard-actions">
+        <a href="/books" class="action-card action-books">
+            <div class="action-icon">📖</div>
+            <div class="action-title">Gestionează Cărți</div>
+            <div class="action-desc">Adaugă, editează sau șterge cărți</div>
+        </a>
+        <a href="/authors" class="action-card action-authors">
+            <div class="action-icon">✍️</div>
+            <div class="action-title">Gestionează Autori</div>
+            <div class="action-desc">Administrează baza de autori</div>
+        </a>
+        <a href="/categories" class="action-card action-categories">
+            <div class="action-icon">🏷️</div>
+            <div class="action-title">Gestionează Categorii</div>
+            <div class="action-desc">Organizează categoriile</div>
+        </a>
+    </div>
+</div>
+
+@code {
+    private List<(int Year, int Count)> booksByYear = new();
+    private List<(string Name, int Count, double Percentage)> topCategories = new();
+    private List<(string Name, int BookCount)> topAuthors = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        await Manager.LoadDataAsync();
+        
+        booksByYear = Manager.GetBooksByYear();
+        topCategories = Manager.GetTopCategories();
+        topAuthors = Manager.GetTopAuthors();
+        
+        StateHasChanged();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadDashboardData();
+        await JS.InvokeVoidAsync("showToast", "Dashboard actualizat cu succes! 📊", "info");
+    }
+
+    private int GetOldestYear()
+    {
+        return Manager.Books?.Any() == true ? Manager.Books.Min(b => b.Year) : DateTime.Now.Year;
+    }
+
+    private int GetNewestYear()
+    {
+        return Manager.Books?.Any() == true ? Manager.Books.Max(b => b.Year) : DateTime.Now.Year;
+    }
+}

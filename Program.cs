@@ -21,6 +21,7 @@ builder.Services.AddScoped<BookPageManager>();
 builder.Services.AddScoped<AuthorPageManager>();
 builder.Services.AddScoped<CategoryPageManager>();
 builder.Services.AddScoped<BookDetailsPageManager>();
+builder.Services.AddScoped<DashboardManager>();
 
 var app = builder.Build();
 

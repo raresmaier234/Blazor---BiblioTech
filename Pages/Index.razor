@@ -169,12 +169,6 @@
         }
     }
 
-    private async Task RefreshData()
-    {
-        await LoadData();
-        StateHasChanged();
-    }
-
     private void GoToBookDetails(int bookId)
     {
         Navigation.NavigateTo($"/books/{bookId}");

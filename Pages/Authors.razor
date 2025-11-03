@@ -1,6 +1,7 @@
 @page "/authors"
 @inject AuthorPageManager PageManager
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div class="content-grid">
@@ -43,8 +44,22 @@
         <!-- Authors List -->
         @if (PageManager.FilteredAuthors?.Any() == true)
         {
+            <!-- Pagination Info -->
+            <div id="authors-list-start" class="pagination-info">
+                <span>Afișare <strong>@PageManager.StartItem-@PageManager.EndItem</strong> din <strong>@PageManager.TotalItems</strong> autori</span>
+                <div class="items-per-page">
+                    <label>Afișează:</label>
+                    <select class="form-select form-select-sm" @onchange="@(async e => { PageManager.SetItemsPerPage(int.Parse(e.Value?.ToString() ?? "10")); await ScrollToResults(); StateHasChanged(); })">
+                        <option value="10" selected="@(PageManager.ItemsPerPage == 10)">10</option>
+                        <option value="25" selected="@(PageManager.ItemsPerPage == 25)">25</option>
+                        <option value="50" selected="@(PageManager.ItemsPerPage == 50)">50</option>
+                        <option value="100" selected="@(PageManager.ItemsPerPage == 100)">100</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="row">
-                @foreach (var author in PageManager.FilteredAuthors)
+                @foreach (var author in PageManager.PaginatedAuthors)
                 {
                     <div class="col-md-6 col-lg-4 mb-4">
                         <div class="card h-100">
@@ -75,6 +90,59 @@
                     </div>
                 }
             </div>
+
+            <!-- Pagination Controls -->
+            @if (PageManager.TotalPages > 1)
+            {
+                <nav aria-label="Page navigation" class="pagination-container">
+                    <ul class="pagination pagination-modern">
+                        <li class="page-item @(PageManager.CurrentPage == 1 ? "disabled" : "")">
+                            <button class="page-link" @onclick="async () => { PageManager.PreviousPage(); await ScrollToResults(); StateHasChanged(); }" disabled="@(PageManager.CurrentPage == 1)">
+                                <span>‹</span> Anterior
+                            </button>
+                        </li>
+
+                        @if (PageManager.GetPageNumbers().First() > 1)
+                        {
+                            <li class="page-item">
+                                <button class="page-link" @onclick="async () => { PageManager.GoToPage(1); await ScrollToResults(); StateHasChanged(); }">1</button>
+                            </li>
+                            @if (PageManager.GetPageNumbers().First() > 2)
+                            {
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            }
+                        }
+
+                        @foreach (var pageNum in PageManager.GetPageNumbers())
+                        {
+                            <li class="page-item @(PageManager.CurrentPage == pageNum ? "active" : "")">
+                                <button class="page-link" @onclick="async () => { PageManager.GoToPage(pageNum); await ScrollToResults(); StateHasChanged(); }">@pageNum</button>
+                            </li>
+                        }
+
+                        @if (PageManager.GetPageNumbers().Last() < PageManager.TotalPages)
+                        {
+                            @if (PageManager.GetPageNumbers().Last() < PageManager.TotalPages - 1)
+                            {
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            }
+                            <li class="page-item">
+                                <button class="page-link" @onclick="async () => { PageManager.GoToPage(PageManager.TotalPages); await ScrollToResults(); StateHasChanged(); }">@PageManager.TotalPages</button>
+                            </li>
+                        }
+
+                        <li class="page-item @(PageManager.CurrentPage == PageManager.TotalPages ? "disabled" : "")">
+                            <button class="page-link" @onclick="async () => { PageManager.NextPage(); await ScrollToResults(); StateHasChanged(); }" disabled="@(PageManager.CurrentPage == PageManager.TotalPages)">
+                                Următorul <span>›</span>
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+            }
         }
         else
         {
@@ -167,24 +235,43 @@
         var success = await PageManager.SaveAuthorAsync();
         if (success)
         {
+            var message = PageManager.ShowEditForm ? "Autorul a fost actualizat cu succes! ✍️" : "Autorul a fost adăugat cu succes! ✍️";
+            await JS.InvokeVoidAsync("showToast", message, "success");
             StateHasChanged();
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("showToast", "Eroare la salvarea autorului! ❌", "error");
         }
     }
 
     private async Task DeleteAuthor(int authorId)
     {
-        if (confirm("Ești sigur că vrei să ștergi acest autor?"))
+        bool confirmed = await JS.InvokeAsync<bool>("confirm", "Ești sigur că vrei să ștergi acest autor?");
+        if (confirmed)
         {
             var success = await PageManager.DeleteAuthorAsync(authorId);
             if (success)
             {
+                await JS.InvokeVoidAsync("showToast", "Autorul a fost șters cu succes! 🗑️", "success");
                 StateHasChanged();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("showToast", "Eroare la ștergerea autorului! ❌", "error");
             }
         }
     }
 
-    private bool confirm(string message)
+    private async Task ScrollToResults()
     {
-        return true;
+        try
+        {
+            await JS.InvokeVoidAsync("scrollToElement", "authors-list-start");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error scrolling: {ex.Message}");
+        }
     }
 }

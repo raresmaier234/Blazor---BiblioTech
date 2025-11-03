@@ -2,6 +2,7 @@ using BlazorLibraryApp.Models;
 using BlazorLibraryApp.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.WebUtilities;
+using System.Text;
 
 namespace BlazorLibraryApp.Managers
 {
@@ -39,6 +40,69 @@ namespace BlazorLibraryApp.Managers
         public string ErrorMessage { get; set; } = "";
         public bool ShowCategoryError { get; set; }
 
+        // Pagination
+        public int CurrentPage { get; set; } = 1;
+        public int ItemsPerPage { get; set; } = 10;
+        public int TotalPages => FilteredBooks != null && FilteredBooks.Any() 
+            ? (int)Math.Ceiling(FilteredBooks.Count / (double)ItemsPerPage) 
+            : 1;
+        public int TotalItems => FilteredBooks?.Count ?? 0;
+        public int StartItem => (CurrentPage - 1) * ItemsPerPage + 1;
+        public int EndItem => Math.Min(CurrentPage * ItemsPerPage, TotalItems);
+        
+        public List<Book> PaginatedBooks => FilteredBooks?
+            .Skip((CurrentPage - 1) * ItemsPerPage)
+            .Take(ItemsPerPage)
+            .ToList() ?? new List<Book>();
+
+        public void SetItemsPerPage(int items)
+        {
+            ItemsPerPage = items;
+            CurrentPage = 1;
+            UpdateQueryString();
+        }
+
+        public void GoToPage(int page)
+        {
+            if (page >= 1 && page <= TotalPages)
+            {
+                CurrentPage = page;
+                UpdateQueryString();
+            }
+        }
+
+        public void NextPage()
+        {
+            if (CurrentPage < TotalPages)
+            {
+                CurrentPage++;
+                UpdateQueryString();
+            }
+        }
+
+        public void PreviousPage()
+        {
+            if (CurrentPage > 1)
+            {
+                CurrentPage--;
+                UpdateQueryString();
+            }
+        }
+
+        public List<int> GetPageNumbers()
+        {
+            var pages = new List<int>();
+            var start = Math.Max(1, CurrentPage - 2);
+            var end = Math.Min(TotalPages, CurrentPage + 2);
+
+            for (int i = start; i <= end; i++)
+            {
+                pages.Add(i);
+            }
+
+            return pages;
+        }
+
         // Load Data
         public async Task LoadDataAsync()
         {
@@ -56,7 +120,7 @@ namespace BlazorLibraryApp.Managers
         }
 
         // Filter Books
-        public void FilterBooks()
+        public void FilterBooks(bool resetPage = false)
         {
             if (Books == null)
             {
@@ -73,6 +137,12 @@ namespace BlazorLibraryApp.Managers
                 (string.IsNullOrEmpty(FilterCategoryId) ||
                  book.BookCategories.Any(bc => bc.CategoryId.ToString() == FilterCategoryId))
             ).ToList();
+            
+            // Reset to page 1 only when filters change
+            if (resetPage)
+            {
+                CurrentPage = 1;
+            }
         }
 
         // Apply Filters with Navigation
@@ -92,9 +162,38 @@ namespace BlazorLibraryApp.Managers
             {
                 queryParams["categoryId"] = FilterCategoryId;
             }
+            
+            queryParams["page"] = "1";
+            queryParams["perPage"] = ItemsPerPage.ToString();
 
             var uri = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/books", queryParams);
             _navigation.NavigateTo(uri);
+            
+            FilterBooks(resetPage: true);
+        }
+
+        private void UpdateQueryString()
+        {
+            var queryParams = new Dictionary<string, string?>();
+
+            if (!string.IsNullOrEmpty(SearchTerm))
+            {
+                queryParams["search"] = SearchTerm;
+            }
+            if (!string.IsNullOrEmpty(FilterAuthorId))
+            {
+                queryParams["authorId"] = FilterAuthorId;
+            }
+            if (!string.IsNullOrEmpty(FilterCategoryId))
+            {
+                queryParams["categoryId"] = FilterCategoryId;
+            }
+            
+            queryParams["page"] = CurrentPage.ToString();
+            queryParams["perPage"] = ItemsPerPage.ToString();
+
+            var uri = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/books", queryParams);
+            _navigation.NavigateTo(uri, forceLoad: false);
         }
 
         // Clear Filters
@@ -103,6 +202,8 @@ namespace BlazorLibraryApp.Managers
             SearchTerm = "";
             FilterAuthorId = "";
             FilterCategoryId = "";
+            CurrentPage = 1;
+            ItemsPerPage = 10;
             _navigation.NavigateTo("/books");
         }
 
@@ -115,6 +216,16 @@ namespace BlazorLibraryApp.Managers
             SearchTerm = query.TryGetValue("search", out var searchValue) ? searchValue.ToString() : "";
             FilterAuthorId = query.TryGetValue("authorId", out var authorValue) ? authorValue.ToString() : "";
             FilterCategoryId = query.TryGetValue("categoryId", out var categoryValue) ? categoryValue.ToString() : "";
+            
+            if (query.TryGetValue("page", out var pageValue) && int.TryParse(pageValue, out var page))
+            {
+                CurrentPage = page;
+            }
+            
+            if (query.TryGetValue("perPage", out var perPageValue) && int.TryParse(perPageValue, out var perPage))
+            {
+                ItemsPerPage = perPage;
+            }
 
             FilterBooks();
         }
@@ -236,6 +347,36 @@ namespace BlazorLibraryApp.Managers
                 Console.WriteLine($"Error deleting book: {ex.Message}");
                 return false;
             }
+        }
+
+        // Export to CSV
+        public string ExportToCSV()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Titlu,Autor,Email Autor,An Publicare,Categorii,Data Adaugare");
+
+            foreach (var book in Books ?? new List<Book>())
+            {
+                var title = EscapeCSV(book.Title);
+                var author = EscapeCSV(book.Author?.Name ?? "N/A");
+                var authorEmail = EscapeCSV(book.Author?.Email ?? "N/A");
+                var year = book.Year;
+                var categories = EscapeCSV(string.Join("; ", book.BookCategories.Select(bc => bc.Category?.Name ?? "")));
+                var createdAt = book.CreatedAt.ToString("dd/MM/yyyy HH:mm");
+
+                sb.AppendLine($"\"{title}\",\"{author}\",\"{authorEmail}\",{year},\"{categories}\",\"{createdAt}\"");
+            }
+
+            return sb.ToString();
+        }
+
+        private string EscapeCSV(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "";
+
+            // Escape double quotes by doubling them
+            return value.Replace("\"", "\"\"");
         }
     }
 }

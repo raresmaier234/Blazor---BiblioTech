@@ -25,6 +25,69 @@ namespace BlazorLibraryApp.Managers
         public Author CurrentAuthor { get; set; } = new Author { Name = "", Email = "" };
         public string ErrorMessage { get; set; } = "";
 
+        // Pagination
+        public int CurrentPage { get; set; } = 1;
+        public int ItemsPerPage { get; set; } = 10;
+        public int TotalPages => FilteredAuthors != null && FilteredAuthors.Any()
+            ? (int)Math.Ceiling(FilteredAuthors.Count / (double)ItemsPerPage)
+            : 1;
+        public int TotalItems => FilteredAuthors?.Count ?? 0;
+        public int StartItem => (CurrentPage - 1) * ItemsPerPage + 1;
+        public int EndItem => Math.Min(CurrentPage * ItemsPerPage, TotalItems);
+
+        public List<Author> PaginatedAuthors => FilteredAuthors?
+            .Skip((CurrentPage - 1) * ItemsPerPage)
+            .Take(ItemsPerPage)
+            .ToList() ?? new List<Author>();
+
+        public void SetItemsPerPage(int items)
+        {
+            ItemsPerPage = items;
+            CurrentPage = 1;
+            UpdateQueryString();
+        }
+
+        public void GoToPage(int page)
+        {
+            if (page >= 1 && page <= TotalPages)
+            {
+                CurrentPage = page;
+                UpdateQueryString();
+            }
+        }
+
+        public void NextPage()
+        {
+            if (CurrentPage < TotalPages)
+            {
+                CurrentPage++;
+                UpdateQueryString();
+            }
+        }
+
+        public void PreviousPage()
+        {
+            if (CurrentPage > 1)
+            {
+                CurrentPage--;
+                UpdateQueryString();
+            }
+        }
+
+        public List<int> GetPageNumbers()
+        {
+            var pages = new List<int>();
+            var start = Math.Max(1, CurrentPage - 2);
+            var end = Math.Min(TotalPages, CurrentPage + 2);
+
+            for (int i = start; i <= end; i++)
+            {
+                pages.Add(i);
+            }
+
+            return pages;
+        }
+
         // Load Data
         public async Task LoadDataAsync()
         {
@@ -40,7 +103,7 @@ namespace BlazorLibraryApp.Managers
         }
 
         // Filter Authors
-        public void FilterAuthors()
+        public void FilterAuthors(bool resetPage = false)
         {
             if (Authors == null)
             {
@@ -53,6 +116,12 @@ namespace BlazorLibraryApp.Managers
                 author.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
                 (author.Email != null && author.Email.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
             ).ToList();
+            
+            // Reset to page 1 only when filters change
+            if (resetPage)
+            {
+                CurrentPage = 1;
+            }
         }
 
         // Apply Filters
@@ -64,15 +133,38 @@ namespace BlazorLibraryApp.Managers
             {
                 queryParams["search"] = SearchTerm;
             }
+            
+            queryParams["page"] = "1";
+            queryParams["perPage"] = ItemsPerPage.ToString();
 
             var uri = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/authors", queryParams);
             _navigation.NavigateTo(uri);
+            
+            FilterAuthors(resetPage: true);
+        }
+
+        private void UpdateQueryString()
+        {
+            var queryParams = new Dictionary<string, string?>();
+
+            if (!string.IsNullOrEmpty(SearchTerm))
+            {
+                queryParams["search"] = SearchTerm;
+            }
+            
+            queryParams["page"] = CurrentPage.ToString();
+            queryParams["perPage"] = ItemsPerPage.ToString();
+
+            var uri = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/authors", queryParams);
+            _navigation.NavigateTo(uri, forceLoad: false);
         }
 
         // Clear Filters
         public void ClearFilters()
         {
             SearchTerm = "";
+            CurrentPage = 1;
+            ItemsPerPage = 10;
             _navigation.NavigateTo("/authors");
         }
 
@@ -83,6 +175,16 @@ namespace BlazorLibraryApp.Managers
             var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
 
             SearchTerm = query.TryGetValue("search", out var searchValue) ? searchValue.ToString() : "";
+            
+            if (query.TryGetValue("page", out var pageValue) && int.TryParse(pageValue, out var page))
+            {
+                CurrentPage = page;
+            }
+            
+            if (query.TryGetValue("perPage", out var perPageValue) && int.TryParse(perPageValue, out var perPage))
+            {
+                ItemsPerPage = perPage;
+            }
 
             FilterAuthors();
         }

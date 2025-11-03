@@ -1,6 +1,7 @@
 @page "/books"
 @inject BookPageManager PageManager
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 @implements IDisposable
 
 <div class="content-grid">
@@ -12,16 +13,21 @@
                 <h1 class="page-title">📖 Gestionare Cărți</h1>
                 <p class="page-subtitle">Administrează colecția ta de cărți cu ușurință</p>
             </div>
-            <button class="btn btn-primary btn-animated" @onclick="PageManager.ToggleAddForm">
-                @if (PageManager.ShowAddForm)
-                {
-                    <span>✖️ Anulează</span>
-                }
-                else
-                {
-                    <span>➕ Adaugă Carte</span>
-                }
-            </button>
+            <div class="header-actions">
+                <button class="btn btn-success btn-animated" @onclick="DownloadCSV">
+                    <span>📥 Export CSV</span>
+                </button>
+                <button class="btn btn-primary btn-animated" @onclick="PageManager.ToggleAddForm">
+                    @if (PageManager.ShowAddForm)
+                    {
+                        <span>✖️ Anulează</span>
+                    }
+                    else
+                    {
+                        <span>➕ Adaugă Carte</span>
+                    }
+                </button>
+            </div>
         </div>
 
         <!-- Search and Filters -->
@@ -63,8 +69,22 @@
         <!-- Books List -->
         @if (PageManager.FilteredBooks?.Any() == true)
         {
+            <!-- Pagination Info -->
+            <div id="books-list-start" class="pagination-info">
+                <span>Afișare <strong>@PageManager.StartItem-@PageManager.EndItem</strong> din <strong>@PageManager.TotalItems</strong> cărți</span>
+                <div class="items-per-page">
+                    <label>Afișează:</label>
+                    <select class="form-select form-select-sm" @onchange="@(async e => { PageManager.SetItemsPerPage(int.Parse(e.Value?.ToString() ?? "10")); await ScrollToResults(); StateHasChanged(); })">
+                        <option value="10" selected="@(PageManager.ItemsPerPage == 10)">10</option>
+                        <option value="25" selected="@(PageManager.ItemsPerPage == 25)">25</option>
+                        <option value="50" selected="@(PageManager.ItemsPerPage == 50)">50</option>
+                        <option value="100" selected="@(PageManager.ItemsPerPage == 100)">100</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="row">
-                @foreach (var book in PageManager.FilteredBooks)
+                @foreach (var book in PageManager.PaginatedBooks)
                 {
                     <div class="col-md-6 col-lg-4 mb-4">
                         <div class="card h-100">
@@ -99,6 +119,59 @@
                     </div>
                 }
             </div>
+
+            <!-- Pagination Controls -->
+            @if (PageManager.TotalPages > 1)
+            {
+                <nav aria-label="Page navigation" class="pagination-container">
+                    <ul class="pagination pagination-modern">
+                        <li class="page-item @(PageManager.CurrentPage == 1 ? "disabled" : "")">
+                            <button class="page-link" @onclick="async () => { PageManager.PreviousPage(); await ScrollToResults(); StateHasChanged(); }" disabled="@(PageManager.CurrentPage == 1)">
+                                <span>‹</span> Anterior
+                            </button>
+                        </li>
+
+                        @if (PageManager.GetPageNumbers().First() > 1)
+                        {
+                            <li class="page-item">
+                                <button class="page-link" @onclick="async () => { PageManager.GoToPage(1); await ScrollToResults(); StateHasChanged(); }">1</button>
+                            </li>
+                            @if (PageManager.GetPageNumbers().First() > 2)
+                            {
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            }
+                        }
+
+                        @foreach (var pageNum in PageManager.GetPageNumbers())
+                        {
+                            <li class="page-item @(PageManager.CurrentPage == pageNum ? "active" : "")">
+                                <button class="page-link" @onclick="async () => { PageManager.GoToPage(pageNum); await ScrollToResults(); StateHasChanged(); }">@pageNum</button>
+                            </li>
+                        }
+
+                        @if (PageManager.GetPageNumbers().Last() < PageManager.TotalPages)
+                        {
+                            @if (PageManager.GetPageNumbers().Last() < PageManager.TotalPages - 1)
+                            {
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            }
+                            <li class="page-item">
+                                <button class="page-link" @onclick="async () => { PageManager.GoToPage(PageManager.TotalPages); await ScrollToResults(); StateHasChanged(); }">@PageManager.TotalPages</button>
+                            </li>
+                        }
+
+                        <li class="page-item @(PageManager.CurrentPage == PageManager.TotalPages ? "disabled" : "")">
+                            <button class="page-link" @onclick="async () => { PageManager.NextPage(); await ScrollToResults(); StateHasChanged(); }" disabled="@(PageManager.CurrentPage == PageManager.TotalPages)">
+                                Următorul <span>›</span>
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+            }
         }
         else
         {
@@ -220,25 +293,63 @@
         var success = await PageManager.SaveBookAsync();
         if (success)
         {
+            var message = PageManager.ShowEditForm ? "Cartea a fost actualizată cu succes! 📚" : "Cartea a fost adăugată cu succes! 📚";
+            await JS.InvokeVoidAsync("showToast", message, "success");
             StateHasChanged();
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("showToast", "Eroare la salvarea cărții! ❌", "error");
         }
     }
 
     private async Task DeleteBook(int bookId)
     {
-        if (confirm($"Ești sigur că vrei să ștergi această carte?"))
+        bool confirmed = await JS.InvokeAsync<bool>("confirm", "Ești sigur că vrei să ștergi această carte?");
+        if (confirmed)
         {
             var success = await PageManager.DeleteBookAsync(bookId);
             if (success)
             {
+                await JS.InvokeVoidAsync("showToast", "Cartea a fost ștearsă cu succes! 🗑️", "success");
                 StateHasChanged();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("showToast", "Eroare la ștergerea cărții! ❌", "error");
             }
         }
     }
 
-    private bool confirm(string message)
+    private async Task DownloadCSV()
     {
-        // În o aplicație reală, ai folosi JSInterop pentru confirm
-        return true; // Pentru simplitate, returnăm true
+        try
+        {
+            var csv = PageManager.ExportToCSV();
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+            var base64 = Convert.ToBase64String(bytes);
+            var dataUrl = $"data:text/csv;charset=utf-8;base64,{base64}";
+            var filename = $"carti_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+            await JS.InvokeVoidAsync("downloadFile", dataUrl, filename);
+            await JS.InvokeVoidAsync("showToast", $"✅ Exportate {PageManager.Books?.Count ?? 0} cărți!", "success");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting CSV: {ex.Message}");
+            await JS.InvokeVoidAsync("showToast", "❌ Eroare la export!", "error");
+        }
+    }
+
+    private async Task ScrollToResults()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("scrollToElement", "books-list-start");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error scrolling: {ex.Message}");
+        }
     }
 }

@@ -1,6 +1,7 @@
 @page "/books/{id:int}"
 @inject BookDetailsPageManager PageManager
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <div class="book-details-container">
     @if (PageManager.CurrentBook == null)
@@ -18,7 +19,7 @@
             <!-- Back Button -->
             <div class="mb-4">
                 <button class="btn btn-outline-secondary" @onclick="PageManager.NavigateToBooks">
-                    ← Înapoi la Cărți
+                    ← Înapoi la cărți
                 </button>
             </div>
 
@@ -146,14 +147,10 @@
 
     private async Task DeleteBook()
     {
-        if (confirm($"Ești sigur că vrei să ștergi cartea '{PageManager.CurrentBook?.Title}'?"))
+        bool confirmed = await JS.InvokeAsync<bool>("confirm", $"Ești sigur că vrei să ștergi cartea '{PageManager.CurrentBook?.Title}'?");
+        if (confirmed)
         {
             await PageManager.DeleteBookAsync(Id);
         }
-    }
-
-    private bool confirm(string message)
-    {
-        return true;
     }
 }
